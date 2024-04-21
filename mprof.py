@@ -15,12 +15,11 @@ from ast import literal_eval
 from collections import defaultdict
 from argparse import ArgumentParser, ArgumentError, REMAINDER, RawTextHelpFormatter
 
-import utils
 import memory_profiler as mp
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
-color = utils.Colorful()
+color = mp.Colorful()
 
 
 def get_profile_filenames(args):
@@ -234,7 +233,7 @@ def plot_file(filename, timestamps=True, children=True, options=None):
 
     if show_trend_slope:
         # Plot the trend line
-        plt.plot(ts, (slope := utils.polynomial(ts, mem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
+        plt.plot(ts, (slope := mp.polynomial(ts, mem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
         plt.annotate(f'{mem_trend[0]:.2f}x^2 + {mem_trend[1]:.2f}x', xy=(ts[len(ts) >> 1], slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
 
     # plot children, if any
@@ -257,7 +256,7 @@ def plot_file(filename, timestamps=True, children=True, options=None):
 
             if show_trend_slope:
                 # Plot the trend line
-                plt.plot(cts, (cslope := utils.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
+                plt.plot(cts, (cslope := mp.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
                 plt.annotate(f'{cmem_trend[0]:.2f}x^2 + {cmem_trend[1]:.2f}x', xy=(cts[len(ts) >> 1], cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
 
             # Detect the maximal child memory point
@@ -632,7 +631,7 @@ def run_action():
     parser.add_argument('--exit-code', '-E', dest='exit_code', action='store_true', help='Propagate the exit code')
     attach_arg = parser.add_argument('--attach', '-a', dest='attach_existing', action='store_true', help='Attach to an existing process, by process name or by pid')
     parser.add_argument('--timeout', '-t', dest='timeout', action='store', type=int, help='timeout in seconds for the profiling, default new process has no timeout, attach existing is 1 hour')
-    parser.add_argument('--output', '-o', dest='filename', default=f'mprofile_{utils.now()}.dat', help='File to store results in, defaults to `mprofile_<YYYY-MM-DD-hh-mm-ss>.dat` in current directory\n'
+    parser.add_argument('--output', '-o', dest='filename', default=f'mprofile_{mp.now()}.dat', help='File to store results in, defaults to `mprofile_<YYYY-MM-DD-hh-mm-ss>.dat` in current directory\n'
                                                                                                  '(which is the date-time of the program start).\n'
                                                                                                  'This file contains the process memory consumption, in Mb (one value per line).')
     parser.add_argument('--backend', dest='backend', choices=['psutil', 'psutil_pss', 'psutil_uss', 'posix', 'tracemalloc'], default='psutil',
