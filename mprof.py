@@ -129,7 +129,9 @@ def add_brackets(xloc, yloc, xshift=0, color='r', label=None, options=None):
 
         # TODO: use matplotlib.patches.Polygon to draw a colored background for  # each function.
 
-        # with maplotlib 1.2, use matplotlib.path.Path to create proper markers  # see http://matplotlib.org/examples/pylab_examples/marker_path.html  # This works with matplotlib 0.99.1  ## pl.plot(xloc[0], yloc[0], '<'+color, markersize=7, label=label)  ## pl.plot(xloc[1], yloc[1], '>'+color, markersize=7)
+        # with maplotlib 1.2, use matplotlib.path.Path to create proper markers
+        # see http://matplotlib.org/examples/pylab_examples/marker_path.html
+        # This works with matplotlib 0.99.1  ## pl.plot(xloc[0], yloc[0], '<'+color, markersize=7, label=label)  ## pl.plot(xloc[1], yloc[1], '>'+color, markersize=7)
 
 
 def read_mprofile_file(filename):
@@ -216,6 +218,7 @@ def plot_file(filename, timestamps=True, children=True, options=None):
     global_start = float(ts[0])
     ts -= global_start
 
+    max_ts = ts.max()
     max_mem = mem.max()
     show_trend_slope = options is not None and hasattr(options, 'slope') and options.slope is True
 
@@ -227,14 +230,28 @@ def plot_file(filename, timestamps=True, children=True, options=None):
         # Compute trend line
         mem_trend = np.polyfit(ts, mem, 2)
 
+    if max_ts > 300:
+        plt.xticks(np.arange(0, max_ts + 60, 60) / 60)
+        ts /= 60
+        plt.xlabel('Time / minutes')
+    plt.xlabel('Time / seconds')
+
+    if max_mem > 3072:
+        plt.yticks(np.arange(0, max_mem + 1024, 1024) / 1024)
+        mem /= 1024
+        plt.ylabel('Memory / Gib')
+    plt.ylabel('Memory / Mib')
+    # plt.xticks([i * 60 for i in range(int(ts.max()) // 60 + 1)])
+    # plt.xticks([i for i in range(ts.max() // 60 + 1)])
+
     p = plt.plot(ts, mem, '+-', label=mem_line_label)
     main_color, main_linewidth = p[0].get_color(), p[0].get_linewidth()
-    plt.annotate(f'{max_mem:.1f}Mib', xy=(ts[mem.argmax()], mem.max()), xytext=(0, 7), textcoords='offset points', color=main_color)
+    plt.annotate(f'{max_mem:.1f}Mib', xy=(max_ts, max_mem), xytext=(0, 7), textcoords='offset points', color=main_color)
 
     if show_trend_slope:
         # Plot the trend line
         plt.plot(ts, (slope := mp.polynomial(ts, mem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
-        plt.annotate(f'{mem_trend[0]:.2f}x^2 + {mem_trend[1]:.2f}x', xy=(ts[len(ts) >> 1], slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
+        plt.annotate(f'{mem_trend[0]:.2f}x^2 + {mem_trend[1]:.2f}x', xy=(float(ts[len(ts) >> 1]), slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
 
     # plot children, if any
     if len(child) > 0 and children:
@@ -244,6 +261,7 @@ def plot_file(filename, timestamps=True, children=True, options=None):
             # Create the numpy arrays from the series data
             cts = np.asarray([item[1] for item in data]) - global_start
             cmem = np.asarray([item[0] for item in data])
+            max_cmem = cmem.max()
 
             cmem_trend = None
             child_mem_trend_label = filename.split('.', 1)[0]
@@ -253,16 +271,16 @@ def plot_file(filename, timestamps=True, children=True, options=None):
 
             # Plot the line to the figure
             plt.plot(cts, cmem, '+-', label=f'child {proc}-{child_mem_trend_label}', linewidth=main_linewidth / 2, color=main_color)
+            plt.annotate(f'{max_mem:.1f}Mib', xy=(cts.max(), max_cmem), xytext=(0, 7), textcoords='offset points', color=main_color)
 
             if show_trend_slope:
                 # Plot the trend line
                 plt.plot(cts, (cslope := mp.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
-                plt.annotate(f'{cmem_trend[0]:.2f}x^2 + {cmem_trend[1]:.2f}x', xy=(cts[len(ts) >> 1], cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
+                plt.annotate(f'{cmem_trend[0]:.2f}x^2 + {cmem_trend[1]:.2f}x', xy=(float(cts[len(ts) >> 1]), cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
 
             # Detect the maximal child memory point
-            cmax_mem = cmem.max()
-            if cmax_mem > cmpoint[1]:
-                cmpoint = (cts[cmem.argmax()], cmax_mem)
+            if max_cmem > cmpoint[1]:
+                cmpoint = (cts[cmem.argmax()], max_cmem)
 
         # Add the marker lines for the maximal child memory usage
         plt.vlines(cmpoint[0], plt.ylim()[0] + 0.001, plt.ylim()[1] - 0.001, 'r', '--')
@@ -632,8 +650,8 @@ def run_action():
     attach_arg = parser.add_argument('--attach', '-a', dest='attach_existing', action='store_true', help='Attach to an existing process, by process name or by pid')
     parser.add_argument('--timeout', '-t', dest='timeout', action='store', type=int, help='timeout in seconds for the profiling, default new process has no timeout, attach existing is 1 hour')
     parser.add_argument('--output', '-o', dest='filename', default=f'mprofile_{mp.now()}.dat', help='File to store results in, defaults to `mprofile_<YYYY-MM-DD-hh-mm-ss>.dat` in current directory\n'
-                                                                                                 '(which is the date-time of the program start).\n'
-                                                                                                 'This file contains the process memory consumption, in Mb (one value per line).')
+                                                                                                    '(which is the date-time of the program start).\n'
+                                                                                                    'This file contains the process memory consumption, in Mb (one value per line).')
     parser.add_argument('--backend', dest='backend', choices=['psutil', 'psutil_pss', 'psutil_uss', 'posix', 'tracemalloc'], default='psutil',
                         help='Current supported backends: `psutil`, `psutil_pss`, `psutil_uss`, `posix`, `tracemalloc`. Defaults to `psutil`.')
     parser.add_argument('program', nargs=REMAINDER, help='Option 1: "<EXECUTABLE> <ARG1> <ARG2>..." - profile executable\n'
@@ -708,9 +726,9 @@ def plot_action():
         try:
             newvalue = [float(x) for x in value.split(',')]
         except:
-            raise ArgumentError(f'{value} option must contain two numbers separated with a comma')
+            raise ArgumentError(None, f'{value} option must contain two numbers separated with a comma')
         if len(newvalue) != 2:
-            raise ArgumentError(f'{value} option must contain two numbers separated with a comma')
+            raise ArgumentError(None, f'{value} option must contain two numbers separated with a comma')
         return newvalue
 
     desc = 'Plots using matplotlib the data file `file.dat` generated using `mprof run`. If no .dat file is given, it will take the most recent such file in the current directory. '
@@ -755,15 +773,14 @@ def plot_action():
 
     timestamps = False if len(filenames) > 1 or args.no_timestamps else True
     plotter = flame_plotter if args.flame_mode else plot_file
-    for n, filename in enumerate(filenames):
-        mprofile = plotter(filename, timestamps=timestamps, options=args)
-    plt.xlabel('Time / seconds')
-    plt.ylabel('Memory / MiB')
+    cmd_line = ''
+    for filename in filenames:
+        cmd_line = plotter(filename, timestamps=timestamps, options=args)['cmd_line']
 
     if args.title:
         plt.title(args.title)
     elif len(filenames) == 1:
-        plt.title(mprofile['cmd_line'])
+        plt.title(cmd_line)
 
     # place legend within the plot, make partially transparent in case it obscures part of the lineplot
     if not args.flame_mode:
