@@ -3,7 +3,6 @@ import os
 import sys
 import pdb
 import time
-import timeit
 import inspect
 import logging
 import builtins
@@ -759,7 +758,7 @@ def get_memory(pid, backend, timestamps=False, include_children=False, filename=
         # cross-platform but requires Python 3.4 or higher
         stat = next(filter(lambda item: str(item).startswith(filename), tracemalloc.take_snapshot().statistics('filename')))
         mem = stat.size / InMegaBytes
-        return mem, timeit.default_timer() if timestamps else mem
+        return mem, time.time() if timestamps else mem
 
     def ps_util_tool():
         # Cross-platform but requires psutil
@@ -770,7 +769,7 @@ def get_memory(pid, backend, timestamps=False, include_children=False, filename=
             mem = getattr(process, meminfo_attr)()[0] / InMegaBytes
             if include_children:
                 mem += sum(mem for (_, mem) in get_child_memory(process, meminfo_attr))
-            return mem, timeit.default_timer() if timestamps else mem
+            return mem, time.time() if timestamps else mem
         except psutil.AccessDenied:
             pass  # continue and try to get this from ps
 
@@ -790,7 +789,7 @@ def get_memory(pid, backend, timestamps=False, include_children=False, filename=
             if include_children:
                 mem += sum(mem for (_, mem) in get_child_memory(process, 'memory_full_info', memory_metric))
 
-            return mem, timeit.default_timer() if timestamps else mem
+            return mem, time.time() if timestamps else mem
         except psutil.AccessDenied:
             pass  # continue and try to get this from ps
 
@@ -806,9 +805,9 @@ def get_memory(pid, backend, timestamps=False, include_children=False, filename=
         try:
             vsz_index = out[0].split().index(b'RSS')
             mem = float(out[1].split()[vsz_index]) / 1024
-            return mem, timeit.default_timer() if timestamps else mem
+            return mem, time.time() if timestamps else mem
         except:
-            return -1, timeit.default_timer() if timestamps else -1
+            return -1, time.time() if timestamps else -1
 
     if backend == 'tracemalloc' and (not filename or filename == '<unknown>'):
         raise RuntimeError('There is no access to source file of the profiled function')
@@ -937,7 +936,7 @@ def memory_usage(proc=-1, interval=.1, timeout=None, timestamps=False, include_c
                     # Write children to the stream file
                     if multiprocess:
                         for idx, mem in get_child_memory(proc.pid):
-                            stream.write(f'CHLD {idx} {mem:.6f} {timeit.default_timer():.4f}\n')
+                            stream.write(f'CHLD {idx} {mem:.6f} {time.time():.4f}\n')
                 else:
                     # Create a nested list with the child memory
                     if multiprocess:
@@ -974,7 +973,7 @@ def memory_usage(proc=-1, interval=.1, timeout=None, timestamps=False, include_c
                     # Write children to the stream file
                     if multiprocess:
                         for idx, mem in get_child_memory(proc):
-                            stream.write(f'CHLD {idx} {mem:.6f} {timeit.default_timer():.4f}\n')
+                            stream.write(f'CHLD {idx} {mem:.6f} {time.time():.4f}\n')
                 else:
                     # Create a nested list with the child memory
                     if multiprocess:

@@ -222,8 +222,7 @@ def plot_file(filename, timestamps=True, children=True, options=None):
     max_mem = mem.max()
     show_trend_slope = options is not None and hasattr(options, 'slope') and options.slope is True
 
-    legend = f'{'' if re.search(r'mprofile_*.dat', filename) else filename.split('.', 1)[0]}-[{datetime.datetime.fromtimestamp(global_start).strftime('%Y-%m-%d-%H:%M:%S')}'
-    # {datetime.datetime.fromtimestamp(global_start, tz=time.timezone).strftime('%Y-%m-%d-%H:%M:%S')}
+    legend = f'{'' if re.search(r'mprofile_*.dat', filename) else filename.split('.', 1)[0]}-[{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(global_start))}'
     mem_line_label = f'{legend}.{int(round(math.modf(global_start)[0] * 1000)):03d}]'
 
     mem_trend = None
