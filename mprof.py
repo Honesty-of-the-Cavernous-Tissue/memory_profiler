@@ -183,126 +183,6 @@ def read_mprofile_file(filename):
     return {'mem_usage': mem_usage, 'timestamp': timestamp, 'func_timestamp': func_ts, 'filename': filename, 'cmd_line': cmd_line, 'children': children}
 
 
-def plot_file(filename, timestamps=True, children=True, options=None):
-    try:
-        import pylab as plt
-    except ImportError as e:
-        print(color.yellow('matplotlib is needed for plotting.'))
-        print(e)
-        sys.exit(1)
-
-    mprofile = read_mprofile_file(filename)
-
-    if len(mprofile['timestamp']) == 0:
-        print(color.red(f'** No memory usage values have been found in {filename} file.** File may be empty or invalid.\nIt can be deleted with "mprof rm {filename}"'))
-        sys.exit(0)
-
-    # Merge function timestamps and memory usage together
-    fts = mprofile['func_timestamp']
-    ts = mprofile['timestamp']
-    mem = mprofile['mem_usage']
-    child = mprofile['children']
-
-    if len(fts) > 0:
-        for values in fts.values():
-            for v in values:
-                ts.extend(v[:2])
-                mem.extend(v[2:4])
-
-    ts = np.asarray(ts)
-    sort_index = ts.argsort()
-    ts = ts[sort_index]
-    mem = np.asarray(mem)[sort_index]
-
-    # Plot curves
-    global_start = float(ts[0])
-    ts -= global_start
-
-    max_ts = ts.max()
-    max_mem = mem.max()
-    show_trend_slope = options is not None and hasattr(options, 'slope') and options.slope is True
-
-    legend = f'{'' if re.search(r'mprofile_*.dat', filename) else filename.split('.', 1)[0]}-[{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(global_start))}'
-    mem_line_label = f'{legend}.{int(round(math.modf(global_start)[0] * 1000)):03d}]'
-
-    mem_trend = None
-    if show_trend_slope:
-        # Compute trend line
-        mem_trend = np.polyfit(ts, mem, 2)
-
-    if max_ts > 300:
-        plt.xticks(np.arange(0, max_ts + 60, 60) / 60)
-        ts /= 60
-        plt.xlabel('Time / minutes')
-    plt.xlabel('Time / seconds')
-
-    if max_mem > 3072:
-        plt.yticks(np.arange(0, max_mem + 1024, 1024) / 1024)
-        mem /= 1024
-        plt.ylabel('Memory / Gib')
-    plt.ylabel('Memory / Mib')
-    # plt.xticks([i * 60 for i in range(int(ts.max()) // 60 + 1)])
-    # plt.xticks([i for i in range(ts.max() // 60 + 1)])
-
-    p = plt.plot(ts, mem, '+-', label=mem_line_label)
-    main_color, main_linewidth = p[0].get_color(), p[0].get_linewidth()
-    plt.annotate(f'{max_mem:.1f}Mib', xy=(max_ts, max_mem), xytext=(0, 7), textcoords='offset points', color=main_color)
-
-    if show_trend_slope:
-        # Plot the trend line
-        plt.plot(ts, (slope := mp.polynomial(ts, mem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
-        plt.annotate(f'{mem_trend[0]:.2f}x^2 + {mem_trend[1]:.2f}x', xy=(float(ts[len(ts) >> 1]), slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
-
-    # plot children, if any
-    if len(child) > 0 and children:
-        cmpoint = (0, 0)  # maximal child memory
-
-        for idx, (proc, data) in enumerate(child.items()):
-            # Create the numpy arrays from the series data
-            cts = np.asarray([item[1] for item in data]) - global_start
-            cmem = np.asarray([item[0] for item in data])
-            max_cmem = cmem.max()
-
-            cmem_trend = None
-            child_mem_trend_label = filename.split('.', 1)[0]
-            if show_trend_slope:
-                # Compute trend line
-                cmem_trend = np.polyfit(cts, cmem, 2)
-
-            # Plot the line to the figure
-            plt.plot(cts, cmem, '+-', label=f'child {proc}-{child_mem_trend_label}', linewidth=main_linewidth / 2, color=main_color)
-            plt.annotate(f'{max_mem:.1f}Mib', xy=(cts.max(), max_cmem), xytext=(0, 7), textcoords='offset points', color=main_color)
-
-            if show_trend_slope:
-                # Plot the trend line
-                plt.plot(cts, (cslope := mp.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
-                plt.annotate(f'{cmem_trend[0]:.2f}x^2 + {cmem_trend[1]:.2f}x', xy=(float(cts[len(ts) >> 1]), cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
-
-            # Detect the maximal child memory point
-            if max_cmem > cmpoint[1]:
-                cmpoint = (cts[cmem.argmax()], max_cmem)
-
-        # Add the marker lines for the maximal child memory usage
-        plt.vlines(cmpoint[0], plt.ylim()[0] + 0.001, plt.ylim()[1] - 0.001, 'r', '--')
-        plt.hlines(cmpoint[1], plt.xlim()[0] + 0.001, plt.xlim()[1] - 0.001, 'r', '--')
-
-    # plot timestamps, if any
-    all_colors = ('c', 'y', 'g', 'r', 'b')
-    if len(fts) > 0 and timestamps:
-        func_num = 0
-        f_labels = function_labels(fts.keys())
-        for f, exec_ts in fts.items():
-            for execution in exec_ts:
-                add_brackets(execution[:2], execution[2:], xshift=global_start, color=all_colors[func_num % len(all_colors)], label=f_labels[f] + ' %.3fs' % (execution[1] - execution[0]),
-                             options=options)
-            func_num += 1
-
-    if timestamps:
-        plt.hlines(max_mem, plt.xlim()[0] + 0.001, plt.xlim()[1] - 0.001, colors='r', linestyles='--')
-        plt.vlines(ts[mem.argmax()], plt.ylim()[0] + 0.001, plt.ylim()[1] - 0.001, colors='r', linestyles='--')
-    return mprofile
-
-
 FLAME_PLOTTER_VARS = {'hovered_rect': None, 'hovered_text': None, 'alpha': None}
 
 
@@ -721,6 +601,126 @@ def run_action():
         sys.exit(p.returncode)
 
 
+def plot_file(filename, timestamps=True, children=True, options=None):
+    try:
+        import pylab as plt
+    except ImportError as e:
+        print(color.yellow('matplotlib is needed for plotting.'))
+        print(e)
+        sys.exit(1)
+
+    mprofile = read_mprofile_file(filename)
+
+    if len(mprofile['timestamp']) == 0:
+        print(color.red(f'** No memory usage values have been found in {filename} file.** File may be empty or invalid.\nIt can be deleted with "mprof rm {filename}"'))
+        sys.exit(0)
+
+    # Merge function timestamps and memory usage together
+    fts = mprofile['func_timestamp']
+    ts = mprofile['timestamp']
+    mem = mprofile['mem_usage']
+    child = mprofile['children']
+
+    if len(fts) > 0:
+        for values in fts.values():
+            for v in values:
+                ts.extend(v[:2])
+                mem.extend(v[2:4])
+
+    ts = np.asarray(ts)
+    sort_index = ts.argsort()
+    ts = ts[sort_index]
+    mem = np.asarray(mem)[sort_index]
+
+    # Plot curves
+    global_start = float(ts[0])
+    ts -= global_start
+
+    max_ts = ts.max()
+    max_mem = mem.max()
+    show_trend_slope = options is not None and hasattr(options, 'slope') and options.slope is True
+
+    legend = f'{'' if re.search(r'mprofile_*.dat', filename) else filename.split('.', 1)[0]}-[{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime(global_start))}'
+    mem_line_label = f'{legend}.{int(round(math.modf(global_start)[0] * 1000)):03d}]'
+
+    mem_trend = None
+    if show_trend_slope:
+        # Compute trend line
+        mem_trend = np.polyfit(ts, mem, 2)
+
+    # if max_ts > 300:
+    #     plt.xticks(np.arange(0, max_ts + 60, 60) / 60)
+    #     ts /= 60
+    #     plt.xlabel('Time / minutes')
+    # else:
+    #     plt.xlabel('Time / seconds')
+    #
+    # if max_mem > 3072:
+    #     plt.yticks(np.arange(0, max_mem + 1024, 1024) / 1024)
+    #     mem /= 1024
+    #     plt.ylabel('Memory / Gib')
+    # else:
+    #     plt.ylabel('Memory / Mib')
+
+    p = plt.plot(ts, mem, '+-', label=mem_line_label)
+    main_color, main_linewidth = p[0].get_color(), p[0].get_linewidth()
+    plt.annotate(f'{max_mem:.1f}Mib', xy=(max_ts, max_mem), xytext=(0, 7), textcoords='offset points', color=main_color)
+
+    if show_trend_slope:
+        # Plot the trend line
+        plt.plot(ts, (slope := mp.polynomial(ts, mem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
+        plt.annotate(f'{mem_trend[0]:.2f}x^2 + {mem_trend[1]:.2f}x', xy=(float(ts[len(ts) >> 1]), slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
+
+    # plot children, if any
+    if len(child) > 0 and children:
+        cmpoint = (0, 0)  # maximal child memory
+
+        for idx, (proc, data) in enumerate(child.items()):
+            # Create the numpy arrays from the series data
+            cts = np.asarray([item[1] for item in data]) - global_start
+            cmem = np.asarray([item[0] for item in data])
+            max_cmem = cmem.max()
+
+            cmem_trend = None
+            child_mem_trend_label = filename.split('.', 1)[0]
+            if show_trend_slope:
+                # Compute trend line
+                cmem_trend = np.polyfit(cts, cmem, 2)
+
+            # Plot the line to the figure
+            plt.plot(cts, cmem, '+-', label=f'child {proc}-{child_mem_trend_label}', linewidth=main_linewidth / 2, color=main_color)
+            plt.annotate(f'{max_mem:.1f}Mib', xy=(cts.max(), max_cmem), xytext=(0, 7), textcoords='offset points', color=main_color)
+
+            if show_trend_slope:
+                # Plot the trend line
+                plt.plot(cts, (cslope := mp.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
+                plt.annotate(f'{cmem_trend[0]:.2f}x^2 + {cmem_trend[1]:.2f}x', xy=(float(cts[len(ts) >> 1]), cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
+
+            # Detect the maximal child memory point
+            if max_cmem > cmpoint[1]:
+                cmpoint = (cts[cmem.argmax()], max_cmem)
+
+        # Add the marker lines for the maximal child memory usage
+        plt.vlines(cmpoint[0], plt.ylim()[0] + 0.001, plt.ylim()[1] - 0.001, 'r', '--')
+        plt.hlines(cmpoint[1], plt.xlim()[0] + 0.001, plt.xlim()[1] - 0.001, 'r', '--')
+
+    # plot timestamps, if any
+    all_colors = ('c', 'y', 'g', 'r', 'b')
+    if len(fts) > 0 and timestamps:
+        func_num = 0
+        f_labels = function_labels(fts.keys())
+        for f, exec_ts in fts.items():
+            for execution in exec_ts:
+                add_brackets(execution[:2], execution[2:], xshift=global_start, color=all_colors[func_num % len(all_colors)], label=f_labels[f] + ' %.3fs' % (execution[1] - execution[0]),
+                             options=options)
+            func_num += 1
+
+    if timestamps:
+        plt.hlines(max_mem, plt.xlim()[0] + 0.001, plt.xlim()[1] - 0.001, colors='r', linestyles='--')
+        plt.vlines(ts[mem.argmax()], plt.ylim()[0] + 0.001, plt.ylim()[1] - 0.001, colors='r', linestyles='--')
+    return mprofile
+
+
 def plot_action():
     def xlim_type(value):
         try:
@@ -776,6 +776,9 @@ def plot_action():
     cmd_line = ''
     for filename in filenames:
         cmd_line = plotter(filename, timestamps=timestamps, options=args)['cmd_line']
+
+    plt.xlabel('Time / seconds')
+    plt.ylabel('Memory / Mib')
 
     if args.title:
         plt.title(args.title)
