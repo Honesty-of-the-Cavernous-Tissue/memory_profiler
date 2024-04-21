@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from asyncio import iscoroutinefunction
 from argparse import ArgumentParser, REMAINDER
 
-from utils import Colorful
+import utils
 
 
 if sys.platform == 'win32':
@@ -48,7 +48,7 @@ except ImportError:
     magics_class = lambda cls: cls
 
 InMegaBytes = float(1 << 20)
-color = Colorful()
+color = utils.Colorful()
 
 # get available packages
 try:
