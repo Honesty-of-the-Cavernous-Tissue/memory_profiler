@@ -648,28 +648,19 @@ def plot_file(filename, timestamps=True, children=True, options=None):
         # Compute trend line
         mem_trend = np.polyfit(ts, mem, 2)
 
-    # if max_ts > 300:
-    #     plt.xticks(np.arange(0, max_ts + 60, 60) / 60)
-    #     ts /= 60
-    #     plt.xlabel('Time / minutes')
-    # else:
-    #     plt.xlabel('Time / seconds')
-    #
-    # if max_mem > 3072:
-    #     plt.yticks(np.arange(0, max_mem + 1024, 1024) / 1024)
-    #     mem /= 1024
-    #     plt.ylabel('Memory / Gib')
-    # else:
-    #     plt.ylabel('Memory / Mib')
+    from adjustText import adjust_text
 
-    p = plt.plot(ts, mem, '+-', label=mem_line_label)
+    text = []
+    p = plt.plot(ts, mem, ',-', label=mem_line_label)
     main_color, main_linewidth = p[0].get_color(), p[0].get_linewidth()
-    plt.annotate(f'{max_mem:.1f}Mib', xy=(max_ts, max_mem), xytext=(0, 7), textcoords='offset points', color=main_color)
+    text.append(plt.annotate(f'{max_mem:.1f}Mib', xy=(max_ts, max_mem), xytext=(0, 7), textcoords='offset points', color=main_color))
 
     if show_trend_slope:
         # Plot the trend line
-        plt.plot(ts, (slope := mp.polynomial(ts, mem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
-        plt.annotate(f'{mem_trend[0]:.2f}x^2 + {mem_trend[1]:.2f}x', xy=(float(ts[len(ts) >> 1]), slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
+        # print(len(ts), len(mp.polynomial(ts, mem_trend, 1)))
+        # exit()
+        plt.plot(ts, (slope := mp.polynomial(ts, mem_trend, 2)), '-->', linewidth=main_linewidth / 2, color=main_color, markevery=200)
+        text.append(plt.annotate(f'{mem_trend[0]:.1f}x^2 + {mem_trend[1]:.1f}x', xy=(float(ts[len(ts) >> 1]), slope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color))
 
     # plot children, if any
     if len(child) > 0 and children:
@@ -688,13 +679,13 @@ def plot_file(filename, timestamps=True, children=True, options=None):
                 cmem_trend = np.polyfit(cts, cmem, 2)
 
             # Plot the line to the figure
-            plt.plot(cts, cmem, '+-', label=f'child {proc}-{child_mem_trend_label}', linewidth=main_linewidth / 2, color=main_color)
-            plt.annotate(f'{max_mem:.1f}Mib', xy=(cts.max(), max_cmem), xytext=(0, 7), textcoords='offset points', color=main_color)
+            plt.plot(cts, cmem, ',-.', label=f'child {proc}-{child_mem_trend_label}', linewidth=main_linewidth / 2, color=main_color)
+            text.append(plt.annotate(f'{max_cmem:.1f}Mib', xy=(cts.max(), max_cmem), xytext=(0, 7), textcoords='offset points', color=main_color))
 
             if show_trend_slope:
                 # Plot the trend line
-                plt.plot(cts, (cslope := mp.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 2, color=main_color)
-                plt.annotate(f'{cmem_trend[0]:.2f}x^2 + {cmem_trend[1]:.2f}x', xy=(float(cts[len(ts) >> 1]), cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color)
+                plt.plot(cts, (cslope := mp.polynomial(cts, cmem_trend, 2)), '->', linewidth=main_linewidth / 4, color=main_color, markevery=200)
+                text.append(plt.annotate(f'{cmem_trend[0]:.1f}x^2+{cmem_trend[1]:.1f}x', xy=(float(cts[len(ts) >> 1]), cslope[len(ts) >> 1]), xytext=(0, 7), textcoords='offset points', color=main_color))
 
             # Detect the maximal child memory point
             if max_cmem > cmpoint[1]:
@@ -718,6 +709,7 @@ def plot_file(filename, timestamps=True, children=True, options=None):
     if timestamps:
         plt.hlines(max_mem, plt.xlim()[0] + 0.001, plt.xlim()[1] - 0.001, colors='r', linestyles='--')
         plt.vlines(ts[mem.argmax()], plt.ylim()[0] + 0.001, plt.ylim()[1] - 0.001, colors='r', linestyles='--')
+    adjust_text(text, only_move={'text': 'y+'})
     return mprofile
 
 
